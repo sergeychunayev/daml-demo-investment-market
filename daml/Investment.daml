@@ -1,0 +1,75 @@
+module Investment where
+
+import Daml.Script
+
+type InvestmentKey = (Party, Text)
+
+data InvesmentAmount = InvesmentAmount
+  with
+    investor: Party
+    amount: Int
+  deriving (Eq, Show)
+
+template Investment
+  with
+    id: Text
+    owner: Party
+    description: Text
+    totalAmount: Int
+    investors: [Party]
+    investmentAmounts: [InvesmentAmount]
+  where
+    signatory owner
+    observer investors
+
+    key (owner, id) : InvestmentKey
+    maintainer key._1
+
+    choice Invite : ()
+      with
+        investor: Party
+      controller owner
+      do
+        assertMsg "Investor already added" $ investor `notElem` investors
+        create this with investors = investor :: investors
+        pure()
+
+    choice Invest : ()
+      with
+        investor: Party
+        amount: Int
+      controller investor
+      do
+        assertMsg "Investor not added" $ investor `elem` investors
+        let investmentAmount = InvesmentAmount with ..
+        create this with investmentAmounts = investmentAmount :: investmentAmounts
+        pure()
+
+
+
+setup = do
+  sponge_bob <- allocateParty "sponge_bob"
+  goofy <- allocateParty "goofy"
+  crusty_crabs <- allocateParty "crusty_crabs"
+  scrooge_mcduck <- allocateParty "scrooge_mcduck"
+
+  let investmentId = "1"
+  let investmentKey = (sponge_bob, investmentId)
+  investment0 <- submit sponge_bob do
+    createCmd Investment
+      with
+        id = investmentId
+        owner = sponge_bob
+        description = "A nice imaginary bridge"
+        totalAmount = 1_000_000_000_000
+        investors = []
+        investmentAmounts = []
+
+  submit sponge_bob do exerciseByKeyCmd @Investment investmentKey Invite with investor = goofy
+  submit sponge_bob do exerciseByKeyCmd @Investment investmentKey Invite with investor = crusty_crabs
+  submit sponge_bob do exerciseByKeyCmd @Investment investmentKey Invite with investor = scrooge_mcduck
+  submit goofy do exerciseByKeyCmd @Investment investmentKey Invest with investor = goofy; amount = 1_000_000_000_000
+  submit goofy do exerciseByKeyCmd @Investment investmentKey Invest with investor = goofy; amount = 1_000_000_000_000
+  submit goofy do exerciseByKeyCmd @Investment investmentKey Invest with investor = goofy; amount = 1_000_000_000_000
+  submit crusty_crabs do exerciseByKeyCmd @Investment investmentKey Invest with investor = crusty_crabs; amount = 1
+  submit scrooge_mcduck do exerciseByKeyCmd @Investment investmentKey Invest with investor = scrooge_mcduck; amount = 1
